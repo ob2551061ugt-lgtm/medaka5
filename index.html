@@ -82,6 +82,8 @@
   #tank3d { position: absolute; left: 0; top: 0; width: 100%; border-radius: 12px; display: none; background: #0b0f10; }
   #view #tank { position: relative; }
   #viewHint { margin-top: 4px; }
+  #zoomBtns { position: absolute; right: 8px; bottom: 8px; display: none; flex-direction: column; gap: 6px; z-index: 3; }
+  #zoomBtns button { width: 40px; height: 40px; border-radius: 50%; border: none; background: rgba(0,0,0,.45); color: #fff; font-size: 20px; line-height: 40px; padding: 0; touch-action: manipulation; }
 </style>
 </head>
 <body>
@@ -97,7 +99,7 @@
     <div class="card"><div class="label">酸素</div><div class="value" id="dO2"></div></div>
   </div>
 
-  <div id="view"><canvas id="tank3d"></canvas><canvas id="tank"></canvas></div>
+  <div id="view"><canvas id="tank3d"></canvas><canvas id="tank"></canvas><div id="zoomBtns"><button data-z="in" aria-label="拡大">＋</button><button data-z="out" aria-label="縮小">－</button><button data-z="reset" aria-label="元の視点" style="font-size:16px">⟲</button></div></div>
   <div class="note" id="viewHint"></div>
 
   <div class="controls">
@@ -1721,7 +1723,8 @@ function resize() {
   gl3.style.display = use3d ? 'block' : 'none';
   canvas.style.background = use3d ? 'transparent' : '';
   canvas.style.touchAction = use3d && !decoMode ? 'pan-y' : decoMode ? 'none' : '';
-  document.getElementById('viewHint').textContent = use3d ? (isOutdoor(tank) ? 'ドラッグで鉢のまわりを回る・上下ドラッグで見下ろす角度・ホイールで拡大縮小・ダブルクリックで元の視点' : 'ドラッグで視点を回す・ホイールで拡大縮小・ダブルクリックで元の視点に戻す（スマホは左右にスワイプ）') : '';
+  document.getElementById('viewHint').textContent = use3d ? (isOutdoor(tank) ? 'ドラッグで鉢のまわりを回る・上下ドラッグで見下ろす角度・ホイールで拡大縮小・ダブルクリックで元の視点（スマホ：2本指ピンチで拡大、2本指を上下で角度）' : 'ドラッグで視点を回す・ホイールで拡大縮小・ダブルクリックで元の視点に戻す（スマホ：左右スワイプで回転・2本指ピンチで拡大・ダブルタップで戻す）') : '';
+  document.getElementById('zoomBtns').style.display = use3d ? 'flex' : 'none';
   if (use3d) R3D.resize(W, H);
   makeTextures(tank);
   bubbles = []; ripples = [];
@@ -5391,11 +5394,29 @@ function canvasPos(e) { const r = canvas.getBoundingClientRect(); return { x: e.
 
 // 3D：ドラッグで視点を回す
 let orbit = null, suppressClick = false;
+// スマホ：2本指でピンチ＝拡大縮小、2本指で上下＝見る角度
+const touchPts = new Map(); let pinch = null, lastTap = 0;
+const pinchInfo = () => { const [a, b] = [...touchPts.values()]; return { d: Math.hypot(a.x - b.x, a.y - b.y), y: (a.y + b.y) / 2 }; };
 canvas.addEventListener('pointerdown', e => {
   if (!GEO || GEO.kind !== '3d' || decoMode) return;
+  if (e.pointerType === 'touch') {
+    touchPts.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    if (touchPts.size === 2) { pinch = pinchInfo(); if (orbit && orbit.moved) suppressClick = true; orbit = null; return; }
+    const now = performance.now(); if (now - lastTap < 300) { R3D.resetView(); lastTap = 0; } else lastTap = now;
+  }
   orbit = { x: e.clientX, y: e.clientY, id: e.pointerId, moved: false, touch: e.pointerType === 'touch' };
 });
+const endTouch = e => { touchPts.delete(e.pointerId); if (touchPts.size < 2 && pinch) { pinch = null; suppressClick = true; } };
+canvas.addEventListener('pointerup', endTouch);
+canvas.addEventListener('pointercancel', endTouch);
 canvas.addEventListener('pointermove', e => {
+  if (touchPts.has(e.pointerId)) touchPts.set(e.pointerId, { x: e.clientX, y: e.clientY });
+  if (pinch && touchPts.size === 2) {
+    const p = pinchInfo();
+    if (p.d > 10 && pinch.d > 10) R3D.zoom(pinch.d / p.d);
+    R3D.orbit(0, p.y - pinch.y);
+    pinch = p; e.preventDefault(); return;
+  }
   if (!orbit || e.pointerId !== orbit.id) return;
   const dx = e.clientX - orbit.x, dy = e.clientY - orbit.y;
   if (!orbit.moved && Math.hypot(dx, dy) > 6) { orbit.moved = true; if (!orbit.touch) canvas.setPointerCapture(e.pointerId); }
@@ -5406,6 +5427,11 @@ canvas.addEventListener('pointerup', endOrbit);
 canvas.addEventListener('pointercancel', () => { orbit = null; });
 canvas.addEventListener('wheel', e => { if (!GEO || GEO.kind !== '3d') return; e.preventDefault(); R3D.zoom(e.deltaY > 0 ? 1.07 : 0.93); }, { passive: false });
 canvas.addEventListener('dblclick', () => { if (GEO && GEO.kind === '3d') R3D.resetView(); });
+// 画面上の拡大・縮小ボタン
+document.getElementById('zoomBtns').addEventListener('click', e => {
+  const b = e.target.closest('button'); if (!b || !GEO || GEO.kind !== '3d') return;
+  if (b.dataset.z === 'in') R3D.zoom(0.8); else if (b.dataset.z === 'out') R3D.zoom(1.25); else R3D.resetView();
+});
 
 canvas.addEventListener('click', e => {
   if (suppressClick) { suppressClick = false; return; }
