@@ -1715,13 +1715,13 @@ function resize() {
   canvas.style.height = H + 'px';
   canvas.width = Math.round(W * dpr); canvas.height = Math.round(H * dpr);
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-  const use3d = !isOutdoor(tank) && typeof R3D !== 'undefined' && R3D.ok;
-  GEO = isOutdoor(tank) ? layoutTop(tank) : use3d ? { kind: '3d', T: typeOf(tank) } : layoutSide(tank);
+  const use3d = typeof R3D !== 'undefined' && R3D.ok;
+  GEO = use3d ? { kind: '3d', T: typeOf(tank) } : isOutdoor(tank) ? layoutTop(tank) : layoutSide(tank);
   const gl3 = document.getElementById('tank3d');
   gl3.style.display = use3d ? 'block' : 'none';
   canvas.style.background = use3d ? 'transparent' : '';
   canvas.style.touchAction = use3d && !decoMode ? 'pan-y' : decoMode ? 'none' : '';
-  document.getElementById('viewHint').textContent = use3d ? 'ドラッグで視点を回す・ホイールで拡大縮小・ダブルクリックで元の視点に戻す（スマホは左右にスワイプ）' : '';
+  document.getElementById('viewHint').textContent = use3d ? (isOutdoor(tank) ? 'ドラッグで鉢のまわりを回る・上下ドラッグで見下ろす角度・ホイールで拡大縮小・ダブルクリックで元の視点' : 'ドラッグで視点を回す・ホイールで拡大縮小・ダブルクリックで元の視点に戻す（スマホは左右にスワイプ）') : '';
   if (use3d) R3D.resize(W, H);
   makeTextures(tank);
   bubbles = []; ripples = [];
@@ -3121,6 +3121,11 @@ const M4 = {
     m[12] = p[0]; m[13] = p[1]; m[14] = p[2]; m[15] = 1;
     return m;
   },
+  basis(X, Y, Z, p, s = 1) {
+    const m = new Float32Array(16);
+    m.set([X[0] * s, X[1] * s, X[2] * s, 0, Y[0] * s, Y[1] * s, Y[2] * s, 0, Z[0] * s, Z[1] * s, Z[2] * s, 0, p[0], p[1], p[2], 1]);
+    return m;
+  },
   point(m, p) {
     const w = m[3] * p[0] + m[7] * p[1] + m[11] * p[2] + m[15] || 1;
     return [(m[0] * p[0] + m[4] * p[1] + m[8] * p[2] + m[12]) / w, (m[1] * p[0] + m[5] * p[1] + m[9] * p[2] + m[13]) / w, (m[2] * p[0] + m[6] * p[1] + m[10] * p[2] + m[14]) / w];
@@ -3303,9 +3308,9 @@ function geoLeaf(len = 1, wid = 0.2, curve = 0.15, n = 5) { // +Y に伸びる�
 const FISH_X = [21, 20.2, 19, 17.5, 15.5, 13, 10.5, 8, 5, 2, -1, -4, -7, -10, -13, -15, -16.5];
 function fishProfile(male, daruma, carry) {
   const top = x => lerpTable(x, [[21, 1.1], [20, 2.3], [18, 3.6], [15, 4.5], [11, 4.85], [6, 4.6], [0, 4.4], [-6, 4.2], [-12, 3.4], [-16.5, 2.2]]);
-  const belly = (male ? 4.8 : 6.0) + (carry ? 0.4 : 0);
-  const bot = x => lerpTable(x, [[21, -0.3], [20, -1.3], [18, -2.3], [15, -3.2], [11, -4.1], [6, -belly * 0.9], [0, -belly], [-4, -belly * 0.93], [-8, -4.0], [-12, -3.1], [-16.5, -2.2]]);
-  const wid = x => lerpTable(x, [[21, 0.3], [20, 1.3], [18, 2.4], [15, 3.1], [11, 3.45], [6, 3.55], [0, 3.35], [-5, 2.75], [-10, 2.0], [-16.5, 1.15]]);
+  const belly = (male ? 5.5 : 6.9) + (carry ? 0.5 : 0);
+  const bot = x => lerpTable(x, [[21, -0.3], [20, -1.3], [18, -2.4], [15, -3.5], [11, -4.7], [8, -belly * 0.86], [4, -belly * 0.98], [0, -belly], [-3, -belly * 0.95], [-6, -belly * 0.8], [-9, -4.1], [-12, -3.1], [-16.5, -2.2]]);
+  const wid = x => lerpTable(x, [[21, 0.3], [20, 1.3], [18, 2.4], [15, 3.15], [11, 3.6], [7, 3.95], [3, 4.1], [-1, 3.85], [-5, 3.1], [-9, 2.3], [-13, 1.6], [-16.5, 1.15]]);
   const kx = daruma === 'daruma' ? 0.66 : daruma === 'half' ? 0.82 : 1;
   const ky = daruma === 'daruma' ? 1.3 : daruma === 'half' ? 1.12 : 1;
   return { top: x => top(x / kx) * ky, bot: x => bot(x / kx) * ky, wid: x => wid(x / kx) * (daruma === 'daruma' ? 1.15 : 1), kx, ky, belly };
@@ -3322,9 +3327,9 @@ function geoFishBody(P) {
     const tp = P.top(x), bt = P.bot(x), yc = (tp + bt) / 2, h = (tp - bt) / 2, w = P.wid(x);
     for (let j = 0; j < seg; j++) {
       const th = j / seg * Math.PI * 2, c = Math.cos(th), s = Math.sin(th);
-      const e = c > 0 ? 0.62 : 0.9; // 背中は平ら、お腹は丸い
+      const e = c > 0 ? 0.62 : 0.72; // 背中は平ら、お腹はふっくら丸い
       const y = yc + h * Math.sign(c) * Math.pow(Math.abs(c), e);
-      const z = w * Math.sign(s) * Math.pow(Math.abs(s), c > 0 ? 0.75 : 0.95);
+      const z = w * Math.sign(s) * Math.pow(Math.abs(s), c > 0 ? 0.75 : 0.78);
       geoVert(g, [x, y, z], [0, c, s], [(x / P.kx + 16.5) / 37.5, j / seg]);
     }
   }
@@ -3513,6 +3518,20 @@ function glShadowTarget(gl, size) {
   gl.bindFramebuffer(gl.FRAMEBUFFER, null);
   return { fb, tex, size };
 }
+
+// 石巻貝（Y が殻の高さ方向、足の裏は y=0 の面、頭は +X）
+function geoSnailShell() {
+  const g = geoLathe([[0.01, 0.06], [1.0, 0.04], [1.03, 0.2], [0.96, 0.46], [0.8, 0.7], [0.55, 0.88], [0.26, 0.98], [0.01, 1.02]], 28);
+  geoTransform(g, M4.trs([-0.1, 0, 0], 0, 0, 0, [1.0, 1.0, 0.86]));
+  return g;
+}
+function geoSnailBody() {
+  const foot = geoIco(2); geoTransform(foot, M4.trs([0, 0.03, 0], 0, 0, 0, [0.86, 0.05, 0.7]));
+  const head = geoIco(2); geoTransform(head, M4.trs([0.86, 0.09, 0], 0, 0, 0, [0.34, 0.11, 0.3]));
+  const t1 = geoTube([[1.0, 0.12, 0.1], [1.25, 0.16, 0.25], [1.5, 0.18, 0.42]], 0.035, 4);
+  const t2 = geoTube([[1.0, 0.12, -0.1], [1.25, 0.16, -0.25], [1.5, 0.18, -0.42]], 0.035, 4);
+  return geoMerge(foot, head, t1, t2);
+}
 // =====================================================
 //  3D描画：シェーダー（光・水・質感）
 // =====================================================
@@ -3567,6 +3586,9 @@ uniform float uScatterK, uCaustic, uLed, uRoomLight;
 uniform sampler2DShadow uShadow;
 uniform mat4 uShadowMat;
 uniform float uShadowOn, uShadowTexel, uOutScale;
+uniform float uOutdoor, uRain, uCylR;
+uniform vec3 uSkyTop, uSkyHor, uSunCol;
+uniform vec4 uRip[8];
 
 float hash12(vec2 p){ vec3 p3 = fract(vec3(p.xyx) * .1031); p3 += dot(p3, p3.yzx + 33.33); return fract((p3.x + p3.y) * p3.z); }
 float hash13(vec3 p3){ p3 = fract(p3 * .1031); p3 += dot(p3, p3.zyx + 31.32); return fract((p3.x + p3.y) * p3.z); }
@@ -3614,13 +3636,27 @@ vec2 boxHit(vec3 ro, vec3 rd){
   return vec2(max(max(tmin.x, tmin.y), tmin.z), min(min(tmax.x, tmax.y), tmax.z));
 }
 // 水を通ってくる光の吸収と散乱（奥ほど青緑にかすむ）
+// 水の入っている範囲（水槽は箱、睡蓮鉢は円柱）
+vec2 waterHit(vec3 ro, vec3 rd){
+  vec2 h = boxHit(ro, rd);
+  if (uCylR > 0.0){
+    float a = dot(rd.xz, rd.xz), b = 2.0 * dot(ro.xz, rd.xz), c = dot(ro.xz, ro.xz) - uCylR * uCylR;
+    float disc = b * b - 4.0 * a * c;
+    if (disc < 0.0 || a < 1e-6) return vec2(1.0, 0.0);
+    float s = sqrt(disc);
+    float ry = abs(rd.y) < 1e-5 ? 1e-5 : rd.y;
+    float t0 = (uBoxMin.y - ro.y) / ry, t1 = (uBoxMax.y - ro.y) / ry;
+    h = vec2(max((-b - s) / (2.0 * a), min(t0, t1)), min((-b + s) / (2.0 * a), max(t0, t1)));
+  }
+  return h;
+}
 vec3 waterFog(vec3 col, vec3 P){
   vec3 rd = P - uCamPos; float tP = length(rd); rd /= tP;
-  vec2 h = boxHit(uCamPos, rd);
+  vec2 h = waterHit(uCamPos, rd);
   float d = (h.x > h.y) ? 0.0 : max(0.0, min(tP, h.y) - max(h.x, 0.0));
   return col * exp(-uAbsorb * d) + uScatterCol * (1.0 - exp(-uScatterK * d));
 }
-bool underWater(vec3 P){ return P.y < uBoxMax.y && P.x > uBoxMin.x - 0.3 && P.x < uBoxMax.x + 0.3 && P.z > uBoxMin.z - 0.3 && P.z < uBoxMax.z + 0.3 && P.y > uBoxMin.y; }
+bool underWater(vec3 P){ if (uCylR > 0.0) return P.y < uBoxMax.y && P.y > uBoxMin.y && length(P.xz) < uCylR + 0.3; return P.y < uBoxMax.y && P.x > uBoxMin.x - 0.3 && P.x < uBoxMax.x + 0.3 && P.z > uBoxMin.z - 0.3 && P.z < uBoxMax.z + 0.3 && P.y > uBoxMin.y; }
 
 // まわりの映り込み
 vec3 envWater(vec3 R, float rough){
@@ -3628,7 +3664,15 @@ vec3 envWater(vec3 R, float rough){
   float strip = smoothstep(0.7, 0.97, R.y) * exp(-R.z * R.z * 14.0);
   return c + vec3(1.0, 0.97, 0.9) * strip * uLed * mix(7.0, 1.2, rough);
 }
+// 屋外の空（太陽・空の色）
+vec3 envSky(vec3 R, float rough){
+  vec3 c = mix(uSkyHor, uSkyTop, smoothstep(0.0, 0.7, R.y));
+  c = mix(c, uSkyHor * 0.3, smoothstep(0.0, -0.35, R.y));
+  c += uSunCol * pow(max(dot(R, uLightDir), 0.0), mix(900.0, 25.0, rough)) * mix(30.0, 1.2, rough);
+  return c;
+}
 vec3 envRoom(vec3 R, float rough){
+  if (uOutdoor > 0.5) return envSky(R, rough);
   vec3 c = mix(vec3(0.07, 0.06, 0.05), vec3(0.42, 0.42, 0.40), smoothstep(-0.5, 0.8, R.y)) * uRoomLight;
   // 窓（左上）
   float win = smoothstep(0.55, 0.75, dot(R, normalize(vec3(-0.7, 0.45, 0.55))));
@@ -3636,6 +3680,7 @@ vec3 envRoom(vec3 R, float rough){
   return c;
 }
 
+vec3 gNs = vec3(0.0); bool gUseNs = false;   // うろこ1枚ずつの向き（反射用）
 struct Mat { vec3 albedo; float rough; float metal; float spec; float trans; vec3 emissive; float silver; };
 
 float D_GGX(float NdH, float a){ float a2 = a * a; float d = NdH * NdH * (a2 - 1.0) + 1.0; return a2 / (3.14159 * d * d + 1e-5); }
@@ -3647,7 +3692,8 @@ vec3 lightIt(vec3 P, vec3 N, vec3 V, Mat m){
   float depth = max(0.0, uBoxMax.y - P.y);
   vec3 att = uw ? exp(-uDepthAtt * depth) : vec3(1.0);
   vec3 L = uLightDir; vec3 H = normalize(L + V);
-  float NdL = max(dot(N, L), 0.0), NdV = max(dot(N, V), 1e-3), NdH = max(dot(N, H), 0.0), VdH = max(dot(V, H), 0.0);
+  vec3 Ns = gUseNs ? gNs : N;
+  float NdL = max(dot(N, L), 0.0), NdV = max(dot(N, V), 1e-3), NdH = max(dot(Ns, H), 0.0), VdH = max(dot(V, H), 0.0);
   float sh = shadowAt(P, N);
   float ca = uw ? (0.5 + 1.7 * caustics(P) * uCaustic) : 1.0;
   vec3 lc = uLightCol * att * sh;
@@ -3662,14 +3708,15 @@ vec3 lightIt(vec3 P, vec3 N, vec3 V, Mat m){
   col += m.albedo * m.trans * back * lc * ca;
   vec3 amb = mix(uAmbBot, uAmbTop, N.y * 0.5 + 0.5) * att;
   col += m.albedo * amb * (1.0 - m.metal * 0.6);
-  vec3 R = reflect(-V, N);
+  vec3 R = reflect(-V, Ns);
   vec3 env = uw ? envWater(R, m.rough) * att : envRoom(R, m.rough);
   col += env * F_Schlick(F0, NdV) * (1.0 - m.rough * 0.75);
   // 銀色の反射層（グアニン）：見る角度で虹色に光る
   if (m.silver > 0.001){
     vec3 irid = 0.5 + 0.5 * cos(6.2831 * (vec3(0.0, 0.33, 0.67) + NdV * 1.3 + 0.15));
     vec3 sil = mix(vec3(0.92), irid, 0.3);
-    col += m.silver * sil * (env * 0.9 + lc * pow(NdH, 30.0) * 2.5 + lc * NdL * 0.18 * ca);
+    float sharp = gUseNs ? 90.0 : 30.0;
+    col += m.silver * sil * (env * 0.9 + lc * pow(NdH, sharp) * (gUseNs ? 7.0 : 2.5) + lc * NdL * 0.14 * ca);
   }
   return col + m.emissive;
 }
@@ -3752,10 +3799,31 @@ void main(){
   vec3 alb = toLin(tc.rgb);
   alb = mix(alb, vec3(dot(alb, vec3(0.3, 0.59, 0.11))), uOld * 0.5);
   alb *= 1.0 - uDarken;
-  m.albedo = alb; m.rough = 0.3; m.spec = 1.1; m.trans = 0.3;
+  m.albedo = alb; m.rough = 0.48; m.spec = 1.0; m.trans = 0.3;
   float scaleAA = clamp(1.0 - length(fwidth(vUv * vec2(60.0, 34.0))) * 0.9, 0.0, 1.0);
   N = bumpN(N, vW, mk.r * 0.012 * scaleAA, 1.0);
-  m.silver = mk.g * uSilver;
+  // うろこ1枚ずつ：向きと反射の強さがばらばら → 角度で1枚ずつチラチラ光る
+  // 瓦のように重なった丸いうろこ：3x3の近くのうろこから一番上に重なる1枚を選ぶ
+  vec2 sg = vec2(vUv.x * 60.0, vUv.y * 34.0);
+  vec2 bc = floor(sg), bl = vec2(0.0); float best = -1e9, nearD = 1e9; vec2 nc = bc, nl = vec2(0.0);
+  for (int j = -1; j <= 1; j++) for (int i = -1; i <= 1; i++) {
+    vec2 ci = floor(sg) + vec2(float(i), float(j));
+    vec2 cen = ci + vec2(0.5 + 0.5 * mod(ci.y, 2.0), 0.5);
+    vec2 d = sg - cen; d.x += 0.22;
+    float r = length(d * vec2(1.0, 1.1));
+    if (r < nearD) { nearD = r; nc = ci; nl = d; }
+    if (r < 0.8) { float pr = -ci.x + hash12(ci) * 0.2; if (pr > best) { best = pr; bc = ci; bl = d; } }
+  }
+  if (best < -1e8) { bc = nc; bl = nl; }
+  float h1 = hash12(bc), h2 = hash12(bc + 17.3), h3 = hash12(bc + 41.7);
+  float rr = length(bl * vec2(1.0, 1.1));
+  float edge = smoothstep(0.58, 0.8, rr);
+  float dome = 1.0 - rr * rr;                     // うろこの中央ほど少しふくらむ
+  gNs = normalize(N + (vec3(h1, h2, h3) - 0.5) * 1.0 * scaleAA);
+  gUseNs = true;
+  float refl = mix(1.0, (0.12 + 1.9 * h2 * h2) * (0.55 + 0.6 * dome), scaleAA);
+  m.albedo *= 1.0 - edge * 0.18 * scaleAA;
+  m.silver = mk.g * uSilver * refl * (1.0 - edge * 0.7 * scaleAA);
   m.emissive = mk.b * uGlow;
   float rameM = uRame * smoothstep(0.62, 0.45, min(vUv.y, 1.0 - vUv.y) * 2.0);
   if (rameM > 0.05){ // ラメ：うろこがキラッと光る
@@ -3809,6 +3877,32 @@ void main(){
   vec3 bc = envWater(R, 0.05) * 1.6 + vec3(1.0) * pow(max(dot(R, uLightDir), 0.0), 60.0) * 6.0 * length(uLightCol);
   outColor = vec4(waterFog(bc, vW) * uOutScale, clamp(fr * 0.9 + 0.05, 0.0, 1.0)); return;
 #endif
+#ifdef MAT_SKY
+  vec3 dir = normalize(vW - uCamPos);
+  vec3 sky = envSky(dir, 0.0);
+  float cl = fbm(dir.xz / (abs(dir.y) + 0.12) * 1.6 + uTime * 0.008);
+  float cover = smoothstep(0.62 - uRain * 0.25 - uAlpha * 0.2, 0.85, cl) * smoothstep(0.0, 0.15, dir.y);
+  sky = mix(sky, mix(vec3(1.0), uSkyHor, 0.35 + uRain * 0.4) * (length(uSkyTop) * 1.3 + 0.02), cover);
+  outColor = vec4(sky * uOutScale, 1.0); return;
+#endif
+#ifdef MAT_GLAZE
+  float gn = fbm3(vW * 0.12), gsp = vnoise3(vW * 2.5);
+  vec3 gc = uColor * (0.75 + 0.5 * gn);
+  gc = mix(gc, uColor2, smoothstep(0.55, 0.85, fbm3(vW * 0.35 + 5.0)) * 0.55);
+  float rimG = smoothstep(uBoxMax.y + 2.0, uBoxMax.y + 2.9, vW.y);
+  gc = mix(gc, uColor3, rimG * 0.7);
+  m.albedo = gc; m.rough = mix(0.1, 0.45, rimG) + gsp * 0.08; m.spec = 1.4;
+  N = bumpN(N, vW, gsp * 0.012, 1.0);
+#endif
+#ifdef MAT_SNAIL
+  float sang = atan(vLocal.z, vLocal.x), shg = vLocal.y;
+  float zig = sin(sang * 16.0 + sin(shg * 18.0) * 2.2);
+  vec3 sc = mix(vec3(0.035, 0.03, 0.018), vec3(0.22, 0.18, 0.08), smoothstep(0.55, 0.9, zig) * 0.65);
+  sc *= 0.75 + 0.5 * vnoise(vec2(sang * 5.0, shg * 9.0));
+  if (shg < 0.08) sc = vec3(0.03, 0.025, 0.015);
+  m.albedo = sc; m.rough = 0.32; m.spec = 1.3;
+  N = bumpN(N, vW, vnoise(vec2(sang * 30.0, shg * 25.0)) * 0.015, 1.0);
+#endif
 #ifdef MAT_SHRIMP
   float band = smoothstep(0.4, 0.5, fract(vUv.y * 7.0));
   m.albedo = mix(uColor, uColor2, band * 0.6 + 0.2 * vnoise(vUv * vec2(8.0, 30.0)));
@@ -3845,6 +3939,7 @@ void main(){
 
   vec3 col = lightIt(vW, N, V, m);
   col = waterFog(col, vW);
+  if (uOutdoor > 0.5 && !underWater(vW)) col = mix(col, uSkyHor * 0.85, 1.0 - exp(-length(vW - uCamPos) * 0.0011));
   outColor = vec4(col * uOutScale, alpha);
 #endif
 }`;
@@ -3866,9 +3961,32 @@ void main(){
 const SH_SURF_FRAG = SH_COMMON + `
 in vec3 vW; in vec3 vN; out vec4 outColor;
 uniform float uWaterY, uGreen;
+// 水面の波紋（餌が落ちたところ・雨粒）
+vec3 rippleN(vec2 p){
+  vec2 g = vec2(0.0);
+  for (int i = 0; i < 8; i++){
+    vec4 r = uRip[i]; if (r.w <= 0.0) continue;
+    vec2 d2 = p - r.xy; float d = length(d2) + 1e-4; float rad = r.z * 7.0;
+    g += d2 / d * sin((d - rad) * 3.5) * exp(-pow((d - rad) * 0.9, 2.0)) * r.w * exp(-r.z * 1.4) * 0.5;
+  }
+  if (uRain > 0.0){
+    vec2 c = floor(p * 0.35);
+    for (int x = -1; x <= 1; x++) for (int y = -1; y <= 1; y++){
+      vec2 cc = c + vec2(x, y);
+      for (int k = 0; k < 2; k++){
+        float hh = hash12(cc + float(k) * 13.1);
+        float t = fract(uTime * 0.8 + hh);
+        vec2 ctr = (cc + vec2(hash12(cc + 3.1 + float(k)), hash12(cc + 5.7 + float(k)))) / 0.35;
+        vec2 d2 = p - ctr; float d = length(d2) + 1e-4, rad = t * 3.2;
+        g += d2 / d * sin((d - rad) * 6.0) * exp(-pow((d - rad) * 2.0, 2.0)) * (1.0 - t) * uRain;
+      }
+    }
+  }
+  return vec3(g.x, 0.0, g.y);
+}
 void main(){
   vec3 V = normalize(uCamPos - vW);
-  vec3 N = normalize(vN);
+  vec3 N = normalize(vN + rippleN(vW.xz) * 0.6);
   float rip = vnoise(vW.xz * 1.6 + uTime * vec2(0.7, 0.4)) * 0.6 + vnoise(vW.xz * 4.0 - uTime * vec2(0.3, 0.9)) * 0.4;
   vec3 col; float al;
   if (uCamPos.y < uWaterY){
@@ -3885,8 +4003,17 @@ void main(){
   } else {
     float fr = 0.02 + 0.98 * pow(1.0 - max(dot(N, V), 0.0), 5.0);
     vec3 R = reflect(-V, N);
-    col = envRoom(R, 0.05) * fr * 1.5 + uScatterCol * 0.5;
-    al = clamp(fr + 0.08 + uGreen * 0.6, 0.0, 1.0);
+    vec3 glint = uSunCol * pow(max(dot(R, uLightDir), 0.0), 1400.0) * 60.0;   // 日差しのきらめき
+    vec3 env = envRoom(R, 0.03);
+    if (uOutdoor > 0.5) {
+      // 鉢の縁が水面に映り込む（縁に近いほど・低い角度ほど）
+      float toRim = uCylR - dot(normalize(vW.xz + 1e-4), vW.xz) * sign(dot(R.xz, vW.xz) + 1e-4);
+      float wallAng = atan(2.6, max(0.5, toRim));
+      env = mix(uSkyHor * 0.12 + uAmbTop * 0.1, env, smoothstep(wallAng - 0.08, wallAng + 0.08, asin(clamp(R.y, -1.0, 1.0))));
+      fr = max(fr, 0.035);
+    }
+    col = env * fr * 1.3 + glint + uScatterCol * 0.6 + vec3(0.06, 0.1, 0.03) * uGreen * length(uAmbTop) * 3.0;
+    al = clamp(fr + 0.05 + uGreen * 0.75 + min(1.0, length(glint)) * 0.6, 0.0, 1.0);
   }
   outColor = vec4(waterFog(col, vW - vec3(0.0, 0.01, 0.0)) * uOutScale, al);
 }`;
@@ -3907,7 +4034,7 @@ void main(){
 // 水中のこまかな浮遊物
 const SH_POINT_VERT = `
 layout(location=0) in vec3 aPos;
-uniform mat4 uView, uProj; uniform float uTime, uPx; uniform vec3 uBoxMin, uBoxMax;
+uniform mat4 uView, uProj; uniform float uTime, uPx, uCylR; uniform vec3 uBoxMin, uBoxMax;
 out float vA; out vec3 vW;
 void main(){
   vec3 s = uBoxMax - uBoxMin;
@@ -3918,7 +4045,7 @@ void main(){
   p = uBoxMin + mod(p - uBoxMin, s);
   vec4 vp = uView * vec4(p, 1.0);
   gl_Position = uProj * vp;
-  gl_PointSize = clamp(uPx * 0.06 / -vp.z, 1.0, 4.0);
+  gl_PointSize = (uCylR > 0.0 && length(p.xz) > uCylR - 0.5) ? 0.0 : clamp(uPx * 0.06 / -vp.z, 1.0, 4.0);
   vA = 0.5 + 0.5 * sin(aPos.x * 91.0 + uTime * 0.5); vW = p;
 }`;
 const SH_POINT_FRAG = SH_COMMON + `
@@ -3980,7 +4107,10 @@ const R3D = (() => {
   let S = null;               // 今の水槽のシーン
   const fishGPU = new Map();
   let bubbles3 = [], lastT = 0, frameNo = 0;
-  const cam = { yaw: 0, pitch: 0.025, zoom: 1, tYaw: 0, tPitch: 0.025, tZoom: 1 };
+  const camSide = { yaw: 0, pitch: 0.025, zoom: 1, tYaw: 0, tPitch: 0.025, tZoom: 1 };
+  const camBowl = { yaw: 0, pitch: 0.95, zoom: 0.86, tYaw: 0, tPitch: 0.95, tZoom: 0.86 };
+  let cam = camSide;
+  let ripples3 = [], ripData = new Float32Array(32), seenFood = new WeakSet();
   let view = null, proj = null, eye = [0, 0, 0], vp = null;
   const perf = { sum: 0, n: 0, last: 0 };
 
@@ -3998,8 +4128,8 @@ const R3D = (() => {
     mk('lily', ['DOUBLE', 'MAT_LILY']); mk('fish', ['FISH', 'MAT_FISH']); mk('fishT', ['FISH', 'MAT_FISH']);
     mk('fin', ['FISH', 'DOUBLE', 'MAT_FIN']); mk('pect', ['DOUBLE', 'MAT_FIN']); mk('eye', ['MAT_EYE']);
     mk('egg', ['INSTANCED', 'MAT_EGG']); mk('bubble', ['INSTANCED', 'MAT_BUBBLE']); mk('inst', ['INSTANCED']);
-    mk('shrimp', ['INSTANCED', 'DOUBLE', 'MAT_SHRIMP']); mk('back', ['MAT_BACK']); mk('glass', ['DOUBLE', 'MAT_GLASS']);
-    mk('algae', ['MAT_ALGAE']); mk('emis', ['MAT_EMISSIVE']);
+    mk('shrimp', ['INSTANCED', 'DOUBLE', 'MAT_SHRIMP']); mk('snail', ['INSTANCED', 'MAT_SNAIL']); mk('terraI', ['INSTANCED', 'MAT_TERRA']); mk('back', ['MAT_BACK']); mk('glass', ['DOUBLE', 'MAT_GLASS']);
+    mk('algae', ['MAT_ALGAE']); mk('emis', ['MAT_EMISSIVE']); mk('emisI', ['INSTANCED', 'MAT_EMISSIVE']); mk('sky', ['MAT_SKY']); mk('glaze', ['MAT_GLAZE']);
     mk('shaft', [], SH_VERT, SH_SHAFT_FRAG);
     mk('d', ['DEPTH_ONLY']); mk('dI', ['DEPTH_ONLY', 'INSTANCED']); mk('dF', ['DEPTH_ONLY', 'FISH']); mk('dS', ['DEPTH_ONLY', 'SWAY']); mk('dSI', ['DEPTH_ONLY', 'SWAY', 'INSTANCED']);
     P.surf = glProgram(gl, SH_SURF_VERT, SH_SURF_FRAG);
@@ -4015,7 +4145,9 @@ const R3D = (() => {
     M.rootHair = glMesh(gl, geoLeaf(1, 0.03, 0.05, 2), true);
     M.pect = glMesh(gl, geoPectoral());
     M.quad = glMesh(gl, geoQuad(1, 1));
+    M.rainQuad = glMesh(gl, geoQuad(1, 1), true);
     M.shrimp = glMesh(gl, geoShrimp(), true);
+    M.snailShell = glMesh(gl, geoSnailShell(), true); M.snailBody = glMesh(gl, geoSnailBody(), true);
     M.flake = glMesh(gl, geoIco(1), true);
     // 浮遊物
     const pts = new Float32Array(900 * 3);
@@ -4064,10 +4196,11 @@ const R3D = (() => {
 
   // ---------- 水槽の組み立て
   function sceneKey(tank) {
-    return [tank.id, tank.type, tank.theme.sand, tank.theme.back, tank.light, tank.filter, tank.air, tank.heater, tank.fan, quality,
+    return [tank.id, tank.type, isOutdoor(tank) ? 'out' : 'in', tank.theme.sand, tank.theme.back, tank.light, tank.filter, tank.air, tank.heater, tank.fan, quality,
       tank.decos.map(d => `${d.id}${d.type}${d.placed ? 1 : 0}`).join(',')].join('|');
   }
   function build(tank) {
+    if (isOutdoor(tank)) return buildBowl(tank);
     const T = typeOf(tank), W = T.w, B = T.b, D = T.d;
     const s = { key: sceneKey(tank), tankId: tank.id, W, B, D, waterY: 0.6 + D, items: [], decos: new Map(), shafts: [] };
     s.sub = (x, z) => 0.6 + (0.5 - z / B) * 2.2 + (noise3(x * 0.25, 0.5, z * 0.25) - 0.5) * 0.5;
@@ -4277,9 +4410,80 @@ const R3D = (() => {
     return o;
   }
 
+
+  // ---------- 屋外の睡蓮鉢
+  function geoDisc(R, rings, seg, hfn) {
+    const g = geo();
+    geoVert(g, [0, hfn(0, 0), 0], [0, 1, 0], [0.5, 0.5]);
+    for (let i = 1; i <= rings; i++) for (let j = 0; j < seg; j++) {
+      const r = R * i / rings, a = j / seg * Math.PI * 2, x = Math.cos(a) * r, z = Math.sin(a) * r;
+      geoVert(g, [x, hfn(x, z), z], [0, 1, 0], [0.5 + x / R / 2, 0.5 + z / R / 2]);
+    }
+    for (let j = 0; j < seg; j++) g.idx.push(0, 1 + (j + 1) % seg, 1 + j);
+    for (let i = 1; i < rings; i++) for (let j = 0; j < seg; j++) {
+      const a = 1 + (i - 1) * seg + j, b = 1 + (i - 1) * seg + (j + 1) % seg, c = a + seg, d = b + seg;
+      g.idx.push(a, b, c, b, d, c);
+    }
+    return computeNormals(g);
+  }
+  function buildBowl(tank) {
+    const T = typeOf(tank), D = T.d, waterY = 0.6 + D, rimTop = waterY + 2.6;
+    const s = { key: sceneKey(tank), tankId: tank.id, outdoor: true, R: T.r, D, waterY, W: T.r * 2, B: T.r * 2, items: [], decos: new Map(), shafts: [], glass: [], rimY: rimTop };
+    // 鉢の内側の半径（下ほど細い）
+    const inner = [[25.6, waterY + 1.2], [25.1, waterY - 2], [23.6, 15], [20.6, 7], [17.6, 1.5], [16.3, -0.8], [15.6, -3]];
+    s.rIn = y => lerpTable(y, inner.map(([r, yy]) => [yy, r]));
+    s.cylR = s.rIn(waterY) - 0.2;
+    s.sub = (x, z) => 0.6 + (noise3(x * 0.22, 1.5, z * 0.22) - 0.5) * 0.7 + Math.hypot(x, z) * 0.02;
+    s.boxMin = [-s.cylR, -3, -s.cylR]; s.boxMax = [s.cylR, waterY, s.cylR];
+    const add = (mesh, prog, model, u = {}, opts = {}) => { const it = { mesh: glMesh(gl, mesh), prog, model, u, ...opts }; s.items.push(it); return it; };
+    // 空と地面
+    s.sky = glMesh(gl, geoIco(2));
+    add(geoPlane(1400, 1400, 8, 8), 'sand', M4.trs([0, -5.6, 0]), { uColor: lin('#6b6458'), uColor2: lin('#7d7568'), uColor3: lin('#4a443b') }, { cast: false });
+    const rand = mulberry(tank.id * 0.53 + 0.2);
+    const ns = [180, 360, 520][quality];
+    s.stones = { mesh: glMesh(gl, geoIco(1), true), n: ns };
+    const sd = new Float32Array(ns * 20), stoneCols = ['#7f776b', '#665f55', '#958d7f', '#57514a', '#8a8376'];
+    for (let i = 0; i < ns; i++) {
+      const a = rand() * Math.PI * 2, r = 29 + Math.pow(rand(), 1.6) * 70, sz = 0.5 + rand() * 1.6;
+      sd.set(M4.trs([Math.cos(a) * r, -5.6 + sz * 0.25, Math.sin(a) * r], rand() * 6, rand() * 6, rand() * 6, [sz, sz * 0.6, sz * 0.85]), i * 20);
+      const c = lin(stoneCols[i % stoneCols.length]); sd.set([c[0], c[1], c[2], 0.75], i * 20 + 16);
+    }
+    glInstances(gl, s.stones.mesh, sd, ns);
+    // 鉢（釉薬のかかった陶器）
+    const back = BACKS[tank.theme.back] || BACKS.blue;
+    const prof = [[0.01, -5.6], [15.5, -5.6], [16.6, -5.2], [18.6, -2], [22.6, 6], [25.9, 15], [27.6, rimTop - 1.2], [28.0, rimTop - 0.3], [27.7, rimTop], [26.8, rimTop + 0.05], [25.9, rimTop - 0.2], ...inner, [0.01, -3]];
+    add(geoLathe(prof, 64), 'glaze', M4.ident(), { uColor: lin(back.bowlColor), uColor2: lin(shade(back.bowlColor, 0.3)), uColor3: lin(mix(shade(back.bowlColor, -0.25), '#7a5a40', 0.35)) }, { cull: false });
+    s.Ro = 28;
+    // 鉢の底の土
+    const sand = SAND3D[tank.theme.sand] || SAND3D.akadama;
+    add(geoDisc(s.rIn(0.6) - 0.1, 14, 56, s.sub), 'sand', M4.ident(), { uColor: lin(sand.a), uColor2: lin(sand.b), uColor3: lin(sand.c) }, { cast: false });
+    const n = Math.round(sand.n * 0.75 * [0.35, 0.7, 1][quality]);
+    s.pebbles = { mesh: glMesh(gl, geoIco(1), true), n };
+    const pd = new Float32Array(n * 20), rB = s.rIn(0.6) - 0.6;
+    for (let i = 0; i < n; i++) {
+      const a = rand() * Math.PI * 2, r = Math.sqrt(rand()) * rB, x = Math.cos(a) * r, z = Math.sin(a) * r, sz = sand.s[0] + rand() * (sand.s[1] - sand.s[0]);
+      pd.set(M4.trs([x, s.sub(x, z) + sz * 0.25, z], rand() * 6, rand() * 6, rand() * 6, [sz, sz * 0.65, sz * 0.85]), i * 20);
+      const c = lin(sand.grains[Math.floor(rand() * sand.grains.length)]); pd.set([c[0], c[1], c[2], sand.rough], i * 20 + 16);
+    }
+    glInstances(gl, s.pebbles.mesh, pd, n);
+    s.surface = glMesh(gl, geoDisc(s.cylR + 0.15, 22, 72, () => 0));
+    for (const d of tank.decos) if (d.placed) s.decos.set(d.id, buildDeco(d, s));
+    return s;
+  }
+  // 雨の筋
+  let rainStreaks = [];
+  // 単位（0〜1）→ 水槽の中の x, z
+  function unitXZ(u, w, floating) {
+    if (!S.outdoor) return [(u - 0.5) * S.W, (0.5 - w) * S.B];
+    let x = (u * 2 - 1) * S.R * 0.75, z = (w * 2 - 1) * S.R * 0.75;
+    const lim = floating ? S.cylR - 4 : S.rIn(1) - 3, r = Math.hypot(x, z);
+    if (r > lim) { x *= lim / r; z *= lim / r; }
+    return [x, z];
+  }
+  const toXZ = (a, c) => S.outdoor ? [a, c] : [a - S.W / 2, S.B / 2 - c];
   function decoAnchor(d) {
-    const x = (d.x - 0.5) * S.W, z = (0.5 - d.z) * S.B;
     const floating = ['hyacinth', 'mop'].includes(d.type);
+    const [x, z] = unitXZ(d.x, d.z, floating);
     return { x, z, y: floating ? S.waterY : S.sub(x, z) - (d.type === 'rock' || d.type === 'pipe' ? 0.6 : 0.1), floating };
   }
   function syncDecoLeaves(d, o) {
@@ -4394,8 +4598,9 @@ const R3D = (() => {
 
   // ---------- 光と水の状態
   function environment(tank, t) {
+    if (isOutdoor(tank)) return environmentOut(tank, t);
     const led = ledOn(tank, t), br = brightness(tank, t), rb = roomBrightness(t);
-    const E = {};
+    const E = { outdoor: 0, rain: 0, skyTop: [0, 0, 0], skyHor: [0, 0, 0], sunCol: [0, 0, 0] };
     if (led) { E.lightCol = [3.3, 3.2, 3.0]; E.lightDir = V3.norm([0.12, 1, 0.22]); E.led = 1; }
     else { const k = br * 2.4; E.lightCol = [k * 1.05, k * 0.98, k * 0.88]; E.lightDir = V3.norm([-0.45, 0.85, 0.45]); E.led = 0; }
     const amb = led ? 0.32 : br * 0.5;
@@ -4416,6 +4621,37 @@ const R3D = (() => {
     E.green = Math.min(0.8, A);
     return E;
   }
+  function environmentOut(tank, t) {
+    const sun = sunFactor(t), wk = weather(t), w = WEATHER[wk], st = sunTimes(t), h = hourOf(t);
+    const phi = clamp((h - st.rise) / st.L, 0, 1) * Math.PI;
+    const el = Math.max(0.06, Math.asin(Math.min(1, sun)) * 0.95);
+    const sudare = tank.sudare && tank.sudareOn ? 0.5 : 1;
+    const E = { outdoor: 1, rain: wk === 'rain' ? 1 : 0, led: 0 };
+    E.lightDir = V3.norm([Math.cos(phi) * Math.cos(el), Math.sin(el), -0.5 * Math.cos(el) - 0.15]);
+    const day = Math.min(1, sun * 2.2);
+    const warm = V3.lerp([1.0, 0.62, 0.38], [1.0, 0.96, 0.9], Math.min(1, sun * 2.5));
+    const k = sun > 0.02 ? (0.6 + 2.1 * Math.min(1, sun * 1.4)) * (0.35 + 0.65 * w.light) * sudare : 0.04;
+    E.lightCol = V3.mul(sun > 0.02 ? warm : [0.5, 0.6, 0.9], k);
+    E.sunCol = V3.mul(warm, sun > 0.02 ? 1.5 * w.light * w.light : 0);
+    const skyK = 0.04 + 1.1 * day * (0.45 + 0.55 * w.light);
+    E.skyTop = V3.mul(wk === 'sunny' ? [0.16, 0.33, 0.72] : [0.42, 0.45, 0.5], skyK);
+    E.skyHor = V3.mul(V3.lerp([0.62, 0.68, 0.76], [0.95, 0.62, 0.42], sun > 0 && sun < 0.25 ? (0.25 - sun) * 3 : 0), skyK);
+    E.ambTop = V3.mul(V3.lerp(E.skyTop, E.skyHor, 0.5), 1.1); E.ambBot = V3.mul(E.ambTop, 0.25);
+    E.room = 0;
+    const A = tank.algae / 100;
+    E.absorb = [0.03 + A * 0.06 + tank.mb * 0.05, 0.012 + A * 0.015 + tank.mb * 0.02 + tank.gf * 0.008, 0.018 + A * 0.07 + tank.gf * 0.06];
+    let sc = [0.03, 0.05, 0.04];
+    if (A > 0.02) sc = V3.lerp(sc, [0.05, 0.1, 0.02], Math.min(1, A * 1.5));
+    if (tank.mb > 0.05) sc = V3.lerp(sc, [0.02, 0.05, 0.16], Math.min(0.8, tank.mb));
+    if (tank.gf > 0.05) sc = V3.lerp(sc, [0.12, 0.11, 0.02], Math.min(0.7, tank.gf));
+    E.scatter = V3.mul(sc, Math.max(0.05, day) * (0.5 + 0.5 * w.light));
+    E.scatterK = 0.014 + A * 0.09 + tank.leftover * 0.0005 + E.rain * 0.005;
+    E.depthAtt = [0.014, 0.007, 0.01];
+    E.caustic = sun > 0.05 ? w.light * (1 - A * 0.85) * sudare * 1.1 : 0;
+    E.exposure = 0.85 + (1 - day) * 0.3;
+    E.green = Math.min(0.85, A);
+    return E;
+  }
   function setCommon(p, E, time, isShadow) {
     p.use();
     if (p._frame === frameNo && !isShadow) return p;
@@ -4424,6 +4660,7 @@ const R3D = (() => {
     p.v3('uLightDir', E.lightDir).v3('uLightCol', E.lightCol).v3('uAmbTop', E.ambTop).v3('uAmbBot', E.ambBot);
     p.v3('uBoxMin', S.boxMin).v3('uBoxMax', S.boxMax).v3('uAbsorb', E.absorb).v3('uScatterCol', E.scatter).f('uScatterK', E.scatterK);
     p.v3('uDepthAtt', E.depthAtt).f('uCaustic', E.caustic).f('uLed', E.led).f('uRoomLight', E.room);
+    p.f('uOutdoor', E.outdoor).f('uRain', E.rain).f('uCylR', S.outdoor ? S.cylR : 0).v3('uSkyTop', E.skyTop).v3('uSkyHor', E.skyHor).v3('uSunCol', E.sunCol).v4('uRip', ripData);
     p.m4('uShadowMat', E.shadowMat).f('uShadowOn', E.shadowOn).f('uShadowTexel', 1 / shadow.size).f('uOutScale', hdr ? 1 : 0.5);
     p.tex('uShadow', 7, shadow.tex);
     p.m4('uView', view).m4('uProj', proj);
@@ -4443,6 +4680,15 @@ const R3D = (() => {
     cam.yaw += (cam.tYaw - cam.yaw) * k; cam.pitch += (cam.tPitch - cam.pitch) * k; cam.zoom += (cam.tZoom - cam.zoom) * k;
     const aspect = pxW / pxH, fov = 30 * Math.PI / 180;
     const hfov = 2 * Math.atan(Math.tan(fov / 2) * aspect);
+    if (S.outdoor) {
+      const target = [0, S.waterY * 0.25, 0];
+      const dist = (S.Ro * 2 + 10) / 2 / Math.tan(Math.min(fov, hfov) / 2) * cam.zoom;
+      eye = [Math.sin(cam.yaw) * Math.cos(cam.pitch) * dist, target[1] + Math.sin(cam.pitch) * dist, Math.cos(cam.yaw) * Math.cos(cam.pitch) * dist];
+      view = M4.lookAt(eye, target, [0, 1, 0]);
+      proj = M4.perspective(fov, aspect, 2, 3000);
+      vp = M4.mul(proj, view);
+      return;
+    }
     const top = S.rimY + 4, bottom = -4.5;
     const target = [0, (top + bottom) / 2 - 1.5, 0];
     const dist = Math.max((S.W + 3) / 2 / Math.tan(hfov / 2), (top - bottom + 1.5) / 2 / Math.tan(fov / 2)) * cam.zoom + S.B / 2;
@@ -4451,9 +4697,12 @@ const R3D = (() => {
     proj = M4.perspective(fov, aspect, 1, dist * 4 + 400);
     vp = M4.mul(proj, view);
   }
-  api.orbit = (dx, dy) => { cam.tYaw = clamp(cam.tYaw - dx * 0.006, -0.75, 0.75); cam.tPitch = clamp(cam.tPitch + dy * 0.004, -0.15, 0.75); };
+  api.orbit = (dx, dy) => {
+    if (cam === camBowl) { cam.tYaw -= dx * 0.006; cam.tPitch = clamp(cam.tPitch + dy * 0.004, 0.3, 1.52); }
+    else { cam.tYaw = clamp(cam.tYaw - dx * 0.006, -0.75, 0.75); cam.tPitch = clamp(cam.tPitch + dy * 0.004, -0.15, 0.75); }
+  };
   api.zoom = f => { cam.tZoom = clamp(cam.tZoom * f, 0.2, 1.35); };
-  api.resetView = () => { cam.tYaw = 0; cam.tPitch = 0.025; cam.tZoom = 1; };
+  api.resetView = () => { cam.tYaw = 0; cam.tPitch = cam === camBowl ? 0.95 : 0.025; cam.tZoom = cam === camBowl ? 0.86 : 1; };
   // 画面上の位置（CSS px）
   function toScreen(p) {
     const c = [vp[0] * p[0] + vp[4] * p[1] + vp[8] * p[2] + vp[12], vp[1] * p[0] + vp[5] * p[1] + vp[9] * p[2] + vp[13], vp[3] * p[0] + vp[7] * p[1] + vp[11] * p[2] + vp[15]];
@@ -4476,9 +4725,11 @@ const R3D = (() => {
   };
   api.decoPlaneY = d => decoAnchor(d).y;
   api.dims = () => S ? { W: S.W, B: S.B } : null;
+  // 水槽の中の位置 → 置物の位置（0〜1）
+  api.worldToDeco = p => S.outdoor ? { x: clamp((p[0] / (S.R * 0.75) + 1) / 2, 0, 1), z: clamp((p[2] / (S.R * 0.75) + 1) / 2, 0, 1) } : { x: clamp(p[0] / S.W + 0.5, 0.04, 0.96), z: clamp(0.5 - p[2] / S.B, 0.05, 0.95) };
 
   // ---------- 1フレーム描画
-  const world = (v, T) => [v.a - T.w / 2, 0.6 + T.d - v.y, T.b / 2 - v.c];
+  const world = (v, T) => { const [x, z] = toXZ(v.a, v.c); return [x, 0.6 + T.d - v.y, z]; };
   api.splash = () => { if (!S) return; for (let i = 0; i < 50; i++) bubbles3.push({ p: [(Math.random() - 0.5) * S.W * 0.4, S.waterY - 2 - Math.random() * S.D * 0.5, (Math.random() - 0.5) * S.B * 0.6], r: 0.05 + Math.random() * 0.2, vy: 4 + Math.random() * 8 }); };
 
   api.render = (tank, t, time) => {
@@ -4489,16 +4740,21 @@ const R3D = (() => {
     if (perf.n >= 45) { const avg = perf.sum / perf.n; if (avg > 48 && quality > 0) api.setQuality(quality - 1); perf.sum = 0; perf.n = 0; }
 
     const key = sceneKey(tank);
-    if (!S || S.key !== key) { S = build(tank); }
+    if (!S || S.key !== key) { S = build(tank); cam = S.outdoor ? camBowl : camSide; rainStreaks = []; ripples3 = []; }
     const T = typeOf(tank);
     updateCamera(dt);
     const E = environment(tank, t);
     // 影の行列
-    const c0 = [0, S.waterY * 0.5, 0], L = E.lightDir, ext = Math.max(S.W, S.B) * 0.62 + 6;
+    const c0 = [0, S.waterY * 0.5, 0], L = E.lightDir, ext = S.outdoor ? S.Ro + 6 : Math.max(S.W, S.B) * 0.62 + 6;
     const lv = M4.lookAt(V3.add(c0, V3.mul(L, 80)), c0, [0, 0, -1]);
     const lp = M4.ortho(-ext, ext, -ext, ext, 20, 160);
     E.shadowMat = M4.mul(lp, lv);
     E.shadowOn = quality >= 1 && (E.lightCol[0] > 0.6) ? 1 : 0;
+    // 波紋（餌が落ちたところ）
+    for (const fd of foods) if (!seenFood.has(fd)) { seenFood.add(fd); if (Math.random() < 0.35) { const [x, z] = toXZ(fd.a, fd.c); ripples3.push([x, z, 0, 0.6]); } }
+    for (const r of ripples3) r[2] += dt;
+    ripples3 = ripples3.filter(r => r[2] < 2.5).slice(-8);
+    ripData.fill(0); ripples3.forEach((r, i) => ripData.set(r, i * 4));
 
     // ---- 描くものを集める
     const fishList = [];
@@ -4507,6 +4763,7 @@ const R3D = (() => {
       const g = growth(f), sc = lengthCm(f) / 51;
       const pos = world(v, T);
       pos[1] = Math.max(pos[1], S.sub(pos[0], pos[2]) + 0.6 * sc * 5);
+      if (S.outdoor) { const lim = S.rIn(pos[1]) - 1.4, r = Math.hypot(pos[0], pos[2]); if (r > lim) { pos[0] *= lim / r; pos[2] *= lim / r; } }
       if (v.yaw3 === undefined) v.yaw3 = Math.atan2(v.vc, v.va) || 0;
       const hs = Math.hypot(v.va, v.vc);
       let turn = 0;
@@ -4532,7 +4789,7 @@ const R3D = (() => {
     for (const e of eggsIn(tank.id)) {
       if (e.carriedBy) continue;
       const ep = eggPos(e, tank);
-      const x = (ep.u - 0.5) * S.W, z = (0.5 - ep.w) * S.B;
+      const [x, z] = unitXZ(ep.u, ep.w, ep.v < 0.95);
       const y = ep.v > 0.95 ? S.sub(x, z) + 0.08 : S.waterY - ep.v * S.D;
       eggs.push([x, y, z, e.status === 'mold' ? 2 : e.status === 'white' ? 1 : 0, e.dd / HATCH_DD, e.id % 7 / 7, e.status === 'mold' ? 0.1 : 0.065]);
     }
@@ -4594,6 +4851,11 @@ const R3D = (() => {
   function drawOpaque(tank, E, time, fishList, depthPass) {
     gl.disable(gl.BLEND); gl.depthMask(true);
     if (!depthPass) { gl.enable(gl.CULL_FACE); gl.cullFace(gl.BACK); }
+    if (S.outdoor && !depthPass) {
+      const p = setCommon(P.sky, E, time); p.m4('uModel', M4.trs(eye, 0, 0, 0, 1500)); setMat(p, { uAlpha: weather(state.gameTime) === 'cloudy' ? 1 : 0 });
+      gl.disable(gl.CULL_FACE); gl.depthMask(false); glDraw(gl, S.sky); gl.depthMask(true);
+      const p2 = setCommon(P.pebble, E, time); gl.enable(gl.CULL_FACE); glDraw(gl, S.stones.mesh);
+    }
     // 固定のもの
     for (const it of S.items) {
       if (depthPass && it.cast === false) continue;
@@ -4643,7 +4905,9 @@ const R3D = (() => {
       if (critters.shrimp.length) {
         const data = new Float32Array(critters.shrimp.length * 20);
         critters.shrimp.forEach((s, i) => {
-          const pos = [s.a - T.w / 2, Math.max(0.6 + T.d - s.y, S.sub(s.a - T.w / 2, T.b / 2 - s.c) + 0.25), T.b / 2 - s.c];
+          let [sx2, sz2] = toXZ(s.a, s.c);
+          if (S.outdoor) { const lim = S.rIn(1) - 2, r = Math.hypot(sx2, sz2); if (r > lim) { sx2 *= lim / r; sz2 *= lim / r; } }
+          const pos = [sx2, Math.max(0.6 + T.d - s.y, S.sub(sx2, sz2) + 0.25), sz2];
           data.set(M4.trs(pos, s.th, 0, 0, 0.1 * s.size), i * 20);
         });
         glInstances(gl, M.shrimp, data, critters.shrimp.length);
@@ -4651,25 +4915,42 @@ const R3D = (() => {
         gl.disable(gl.CULL_FACE); glDraw(gl, M.shrimp);
       }
       if (critters.snails.length) {
-        const shell = new Float32Array(critters.snails.length * 20), foot = new Float32Array(critters.snails.length * 20);
+        // ガラス（または底）に張りついた石巻貝
+        const data = new Float32Array(critters.snails.length * 20);
         critters.snails.forEach((n, i) => {
-          const x = (n.u - 0.5) * S.W, y = S.waterY - n.v * S.D, z = S.B / 2 - 0.05;
-          shell.set(M4.mul(M4.trs([x, y, z - 0.35], n.ang, Math.PI / 2, 0, 1), M4.trs([0, 0, 0], 0, 0, 0, [0.95, 0.8, 0.95])), i * 20);
-          shell.set([0, 0, 0, 0], i * 20 + 16);
-          foot.set(M4.trs([x, y, z - 0.08], 0, 0, Math.PI / 2, [0.8, 0.08, 0.62]), i * 20);
+          let m;
+          if (S.outdoor) {
+            if (i % 3 !== 2) {
+              // 鉢の内側の壁に張りつく
+              const th = Math.atan2(n.c || 0.01, n.a || 0.01), y = 2.5 + ((i * 0.618 + 0.21) % 1) * (S.D - 5);
+              const r = S.rIn(y) - 0.03, Yn = V3.norm([-Math.cos(th), 0.3, -Math.sin(th)]);
+              const tg = [-Math.sin(th), 0, Math.cos(th)], up = V3.norm(V3.cross(Yn, tg));
+              const ca = Math.cos(n.ang), sa = Math.sin(n.ang), X = V3.norm(V3.add(V3.mul(tg, ca), V3.mul(up, sa)));
+              data.set(M4.basis(X, Yn, V3.cross(X, Yn), [Math.cos(th) * r, y, Math.sin(th) * r], 0.95), i * 20);
+              return;
+            }
+            const X = [Math.cos(n.ang), 0, Math.sin(n.ang)];
+            let sx = n.a, sz = n.c; const lim = S.rIn(1) - 2, rr = Math.hypot(sx, sz); if (rr > lim) { sx *= lim / rr; sz *= lim / rr; }
+            m = M4.basis(X, [0, 1, 0], V3.cross(X, [0, 1, 0]), [sx, S.sub(sx, sz) + 0.02, sz], 0.95);
+          } else {
+            // 偶数番は前のガラス（足の裏が見える）、奇数番は奥のガラス（殻が見える）
+            const back = i % 2 === 1, X = [Math.cos(n.ang), Math.sin(n.ang), 0], Y = back ? [0, 0, 1] : [0, 0, -1];
+            m = M4.basis(X, Y, V3.cross(X, Y), [(n.u - 0.5) * S.W, S.waterY - n.v * S.D, back ? -S.B / 2 + 0.05 : S.B / 2 - 0.02], 0.95);
+          }
+          data.set(m, i * 20);
         });
-        glInstances(gl, M.ico1, shell, critters.snails.length);
-        let p = setCommon(P.inst, E, time); setMat(p, { uColor: lin('#2d2c1c'), uRough: 0.35, uSpec: 1.2 });
-        gl.enable(gl.CULL_FACE); glDraw(gl, M.ico1);
-        glInstances(gl, M.ico2i, foot, critters.snails.length);
-        p = setCommon(P.inst, E, time); setMat(p, { uColor: lin('#b9ac93'), uRough: 0.6 });
-        glDraw(gl, M.ico2i);
+        glInstances(gl, M.snailShell, data, critters.snails.length);
+        glInstances(gl, M.snailBody, data, critters.snails.length);
+        let p = setCommon(P.snail, E, time); setMat(p, {});
+        gl.disable(gl.CULL_FACE); glDraw(gl, M.snailShell);
+        p = setCommon(P.terraI, E, time); setMat(p, { uColor: lin('#80786a') });
+        glDraw(gl, M.snailBody);
       }
       // 餌と食べ残し
       const T2 = typeOf(tank), fl = [];
-      for (const fd of foods) fl.push(M4.trs([fd.a - T2.w / 2, 0.6 + T2.d - fd.y, T2.b / 2 - fd.c], fd.seed, fd.seed * 2, 0, fd.powder ? [0.04, 0.03, 0.04] : [0.11, 0.05, 0.09]));
+      for (const fd of foods) { const [fx, fz] = toXZ(fd.a, fd.c); fl.push(M4.trs([fx, 0.6 + T2.d - fd.y, fz], fd.seed, fd.seed * 2, 0, fd.powder ? [0.04, 0.03, 0.04] : [0.11, 0.05, 0.09])); }
       const nl = Math.min(80, Math.round(tank.leftover * 6));
-      for (let i = 0; i < nl; i++) { const x = (rnd(61, i) - 0.5) * S.W * 0.9, z = (rnd(67, i) - 0.5) * S.B * 0.9; fl.push(M4.trs([x, S.sub(x, z) + 0.05, z], i, i, 0, [0.1, 0.04, 0.08])); }
+      for (let i = 0; i < nl; i++) { let x = (rnd(61, i) - 0.5) * S.W * 0.9, z = (rnd(67, i) - 0.5) * S.B * 0.9; if (S.outdoor) { const a = rnd(61, i) * 6.28, r = Math.sqrt(rnd(67, i)) * (S.rIn(1) - 2); x = Math.cos(a) * r; z = Math.sin(a) * r; } fl.push(M4.trs([x, S.sub(x, z) + 0.05, z], i, i, 0, [0.1, 0.04, 0.08])); }
       if (fl.length) {
         const data = new Float32Array(fl.length * 20); fl.forEach((m, i) => data.set(m, i * 20));
         glInstances(gl, M.flake, data, fl.length);
@@ -4774,13 +5055,28 @@ const R3D = (() => {
     // ガラス（奥→手前）とコケ
     const gs = S.glass.slice().sort((a, b) => (a.front ? 1 : 0) - (b.front ? 1 : 0));
     for (const g of gs) {
-      if (g.front && tank.glass > 1) {
+      if (g.front && tank.glass > 1 && S.algae) {
         const p = setCommon(P.algae, E, time); p.m4('uModel', M4.trs([0, (S.waterY + 3) / 2 - 3, S.B / 2 - 0.02])).f('uAlpha', tank.glass / 100);
         gl.disable(gl.CULL_FACE); glDraw(gl, S.algae);
       }
       const p = setCommon(P.glass, E, time);
       p.m4('uModel', g.model); setMat(p, { uColor: [0.25, 0.42, 0.34], uTrans: 0.06, uAlpha: 0.015 });
       gl.disable(gl.CULL_FACE); glDraw(gl, g.mesh);
+    }
+    // 雨の筋
+    if (S.outdoor && E.rain) {
+      while (rainStreaks.length < [120, 220, 320][quality]) rainStreaks.push([(Math.random() - 0.5) * 90, Math.random() * 60 - 6, (Math.random() - 0.5) * 90]);
+      const data = new Float32Array(rainStreaks.length * 20);
+      rainStreaks.forEach((r, i) => {
+        r[1] -= 520 * dt; r[0] -= 60 * dt;
+        if (r[1] < -6) { r[0] = (Math.random() - 0.5) * 90; r[1] = 54; r[2] = (Math.random() - 0.5) * 90; }
+        data.set(M4.trs(r, Math.atan2(eye[0] - r[0], eye[2] - r[2]), 0.1, 0, [0.035, 3.2, 1]), i * 20);
+      });
+      glInstances(gl, M.rainQuad, data, rainStreaks.length);
+      gl.blendFunc(gl.SRC_ALPHA, gl.ONE);
+      const p = setCommon(P.emisI, E, time); setMat(p, { uEmissive: V3.mul(E.skyHor, 1.6), uAlpha: 0.35 });
+      gl.disable(gl.CULL_FACE); glDraw(gl, M.rainQuad);
+      gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
     }
     // ファン
     if (S.fan) {
@@ -4827,7 +5123,7 @@ function randomWorld(tank, vmin, vmax) {
 }
 function clampWorld(tank, a, y, c) {
   const T = typeOf(tank);
-  if (T.outdoor) { const R = T.r - 1.5, r = Math.hypot(a, c); if (r > R) { a *= R / r; c *= R / r; } return { a, y, c }; }
+  if (T.outdoor) { const R = (T.r - 1.5) * (1 - 0.28 * clamp(y / T.d, 0, 1)), r = Math.hypot(a, c); if (r > R) { a *= R / r; c *= R / r; } return { a, y, c }; }
   return { a: clamp(a, 1.2, T.w - 1.2), y, c: clamp(c, 1, T.b - 1) };
 }
 function getVisual(f) {
@@ -5141,8 +5437,8 @@ canvas.addEventListener('pointermove', e => {
   if (!dragDeco) return;
   const { x, y } = canvasPos(e), tank = curTank();
   if (GEO.kind === '3d') {
-    const p = R3D.rayPlane(x, y, R3D.decoPlaneY(dragDeco)), dm = R3D.dims();
-    if (p && dm) { dragDeco.x = clamp(p[0] / dm.W + 0.5, 0.04, 0.96); dragDeco.z = clamp(0.5 - p[2] / dm.B, 0.05, 0.95); }
+    const p = R3D.rayPlane(x, y, R3D.decoPlaneY(dragDeco));
+    if (p) { const q = R3D.worldToDeco(p); dragDeco.x = q.x; dragDeco.z = q.z; }
     return;
   }
   if (GEO.kind === 'top') {
@@ -5183,7 +5479,7 @@ function frame(ts) {
   uiTimer += dt; if (dirty || uiTimer > 5) { if (uiTimer > 5 && R3D.ok) R3D.gc(); uiTimer = 0; dirty = false; renderUI(); }
   saveTimer += dt; if (saveTimer > 5) { saveTimer = 0; save(); }
   const tank = curTank();
-  const wantKind = isOutdoor(tank) ? 'top' : R3D.ok ? '3d' : 'side';
+  const wantKind = R3D.ok ? '3d' : isOutdoor(tank) ? 'top' : 'side';
   if (!GEO || TEX.key !== tank.theme.sand + tank.type || GEO.kind !== wantKind || GEO.T !== typeOf(tank)) resize();
   updateMotion(dt, ts / 1000);
   if (GEO.kind === '3d') {
